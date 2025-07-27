@@ -54,7 +54,7 @@ async def make_subscribe_markup(code):
     keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return keyboard
 
-ADMINS = [6486825926, 7483732504, 5959511392]
+ADMINS = [6486825926]
 
 # === HOLATLAR ===
 class AdminStates(StatesGroup):
@@ -216,6 +216,7 @@ async def handle_code_message(message: types.Message):
         await increment_stat(code, "searched")
         await send_reklama_post(message.from_user.id, code)
         await increment_stat(code, "viewed")
+
 
 # === Obuna tekshirish callback
 @dp.callback_query_handler(lambda c: c.data.startswith("check_sub:"))
