@@ -358,31 +358,6 @@ async def kodlar(message: types.Message):
 
     await message.answer(text, parse_mode="Markdown")
 
-
-@dp.message_handler(lambda m: m.text == "🔍 Anime qidirish")
-async def search_start(message: types.Message):
-    await SearchStates.waiting_for_anime_name.set()
-    await message.answer("🔎 Qidirayotgan anime nomini yuboring.\n\n❌ Bekor qilish uchun '❌ Bekor qilish' deb yozing.")
-
-@dp.message_handler(state=SearchStates.waiting_for_anime_name)
-async def perform_search(message: types.Message, state: FSMContext):
-    if message.text.lower() in ["❌", "❌ bekor qilish"]:
-        await state.finish()
-        await message.answer("❌ Qidiruv bekor qilindi.")
-        return
-
-    query = message.text.strip().lower()
-    results = await search.anime_search(query)  # search.py faylidan funksiya
-
-    if not results:
-        await message.answer("❗ Hech narsa topilmadi.")
-    else:
-        msg = "🔍 Qidiruv natijalari:\n\n"
-        for r in results:
-            msg += f"🎬 <b>{r['title']}</b>\n🔗 <code>{r['code']}</code>\n\n"
-        await message.answer(msg, parse_mode="HTML")
-
-    await state.finish()
     
 # === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
