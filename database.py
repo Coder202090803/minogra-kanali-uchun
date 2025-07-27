@@ -138,5 +138,4 @@ async def get_all_user_ids():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT user_id FROM users")
         return [row["user_id"] for row in rows]
-
-
+        
