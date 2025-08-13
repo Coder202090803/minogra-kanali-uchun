@@ -156,7 +156,8 @@ async def start_handler(message: types.Message):
         kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-        kb.add("➕ Admin qo‘shish")
+        kb.add("➕ Admin qo‘shish", "📦 Bazani olish")
+        kb.add("📥 User qo‘shish")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -252,6 +253,86 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
         await message.answer(f"❌ Xatolik: {e}")
     finally:
         await state.finish()
+
+@dp.message_handler(lambda m: m.text == "📥 User qo‘shish", user_id=ADMINS)
+async def add_users_start(message: types.Message):
+    await AdminStates.waiting_for_user_list.set()
+    await message.answer("📋 Foydalanuvchi ID ro‘yxatini yuboring (har bir qatorda bitta ID yoki vergul bilan):")
+@dp.message_handler(state=AdminStates.waiting_for_user_list, user_id=ADMINS)
+async def add_users_process(message: types.Message, state: FSMContext):
+    await state.finish()
+    text = message.text.strip()
+
+    # Har bir qatordagi yoki vergul bilan ajratilgan ID larni ajratish
+    raw_ids = text.replace(",", "\n").split("\n")
+    user_ids = [i.strip() for i in raw_ids if i.strip().isdigit()]
+
+    added = 0
+    errors = 0
+
+    for uid in user_ids:
+        try:
+            await add_user(int(uid))
+            added += 1
+        except Exception as e:
+            print(f"❌ Xato: {uid} -> {e}")
+            errors += 1
+
+    await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
+
+
+
+@dp.message_handler(lambda m: m.text == "📦 Bazani olish", user_id=ADMINS)
+async def dump_database_handler(message: types.Message):
+    try:
+        # 1️⃣ Users IDs olish
+        users = await get_all_user_ids()  # Kutilgan: [1,2,3] yoki [{'user_id':1}, ...]
+        normalized_user_ids = []
+        for u in users:
+            if isinstance(u, dict):
+                normalized_user_ids.append(str(u.get('user_id', next(iter(u.values()), ''))))
+            elif isinstance(u, (list, tuple)) and u:
+                normalized_user_ids.append(str(u[0]))
+            else:
+                normalized_user_ids.append(str(u))
+
+        users_text = ", ".join(normalized_user_ids) if normalized_user_ids else "Foydalanuvchilar yo'q"
+
+        # 2️⃣ Kodlar olish va formatlash
+        codes = await get_all_codes()  # Kutilgan: [{'code','kanal_id','reklamapost_id','qism','nom'}, ...]
+        codes_lines = []
+
+        for row in codes:
+            if isinstance(row, dict):
+                code = row.get("code", "")
+                kanal_id = row.get("kanal_id", "")
+                reklamapost_id = row.get("reklamapost_id", "")
+                qism = row.get("qism", "")
+                nom = row.get("nom", "")
+            else:
+                # Tuple yoki list
+                code, kanal_id, reklamapost_id, qism, nom = (list(row) + [""] * 5)[:5]
+
+            codes_lines.append(f"{code} {kanal_id} {reklamapost_id} {qism} {nom}")
+
+        codes_text = "\n".join(codes_lines) if codes_lines else "Kodlar yo'q"
+
+        # 3️⃣ Yuborish — uzun bo‘lsa fayl sifatida
+        dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}"
+        if len(dump_content) > 3900:
+            bio = io.BytesIO()
+            bio.name = "database_dump.txt"
+            bio.write(dump_content.encode("utf-8"))
+            bio.seek(0)
+            await message.answer("📦 Bazaning natijasi juda uzun — fayl sifatida yuborilmoqda.")
+            await message.answer_document(types.InputFile(bio, filename="database_dump.txt"))
+        else:
+            await message.answer(f"📋 *Users IDlari:*\n`{users_text}`", parse_mode="Markdown")
+            await message.answer(f"🎬 *Kodlar:*\n```\n{codes_text}\n```", parse_mode="Markdown")
+
+    except Exception as e:
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
+        print(f"[dump_database_handler] Error: {e}")
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
@@ -623,26 +704,27 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     await message.answer(f"✅ Yangi kodlar qo‘shildi:\n\n✅ Muvaffaqiyatli: {successful}\n❌ Xatolik: {failed}")
     await state.finish()
 
-
-# === Kodlar ro‘yxati
-@dp.message_handler(lambda m: m.text.strip() == "📄 Kodlar ro‘yxati")
+@dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
 async def kodlar(message: types.Message):
     kodlar = await get_all_codes()
     if not kodlar:
-        await message.answer("⛔️ Hech qanday kod topilmadi.")
+        await message.answer("📂 Kodlar yo‘q.")
         return
-
-    # Kodlarni raqam bo‘yicha kichikdan kattasiga saralash
+    
+    # Kodlarni raqam bo‘yicha saralash
     kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
-
-    text = "📄 *Kodlar ro‘yxati:*\n\n"
+    
+    text = "📄 Kodlar:\n"
     for row in kodlar:
         code = row["code"]
+        ch = row["channel"]
+        msg_id = row["message_id"]
+        count = row["post_count"]
         title = row["title"]
-        text += f"`{code}` - *{title}*\n"
+        
+        text += f"{code} {ch} {msg_id} {count} post {title}\n"
 
     await message.answer(text, parse_mode="Markdown")
-
     
 # === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
