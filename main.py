@@ -60,7 +60,8 @@ class AdminStates(StatesGroup):
     waiting_for_delete_code = State()
     waiting_for_stat_code = State()
     waiting_for_broadcast_data = State()
-    waiting_for_admin_id = State()  # ➕ Admin qo‘shish uchun
+    waiting_for_admin_id = State()  
+    waiting_for_user_list = State()
 
 # Admin reply (javob) uchun holat
 class AdminReplyStates(StatesGroup):
