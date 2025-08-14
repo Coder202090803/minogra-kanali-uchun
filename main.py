@@ -1,4 +1,5 @@
 # === IMPORTLAR ===
+import io
 import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -695,8 +696,8 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
                 await bot.copy_message(
                     chat_id=ch,
                     from_chat_id=server_channel,
-                        message_id=reklama_id,
-                reply_markup=download_btn
+                    message_id=reklama_id,
+                    reply_markup=download_btn
         ) 
             successful += 1
         except:
@@ -713,20 +714,27 @@ async def kodlar(message: types.Message):
         return
     
     # Kodlarni raqam bo‘yicha saralash
-    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
-    
+    try:
+        kodlar = sorted(kodlar, key=lambda x: int(x["code"]) if isinstance(x, dict) else int(x[0]))
+    except Exception as e:
+        await message.answer(f"❌ Saralashda xatolik: {e}")
+        return
+
     text = "📄 Kodlar:\n"
     for row in kodlar:
-        code = row["code"]
-        ch = row["channel"]
-        msg_id = row["message_id"]
-        count = row["post_count"]
-        title = row["title"]
+        if isinstance(row, dict):
+            code = row.get("code", "")
+            ch = row.get("channel", "")
+            msg_id = row.get("message_id", "")
+            count = row.get("post_count", "")
+            title = row.get("title", "")
+        else:  # tuple yoki list
+            code, ch, msg_id, count, title = (list(row) + [""] * 5)[:5]
         
         text += f"{code} {ch} {msg_id} {count} post {title}\n"
 
-    await message.answer(text, parse_mode="Markdown")
-    
+    await message.answer(f"```\n{text}\n```", parse_mode="Markdown")
+
 # === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
