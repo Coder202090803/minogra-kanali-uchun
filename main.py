@@ -284,57 +284,42 @@ async def add_users_process(message: types.Message, state: FSMContext):
 
 
 
-@dp.message_handler(lambda m: m.text == "📦 Bazani olish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "📦 Bazani olish")
 async def dump_database_handler(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        await message.answer("⛔ Sizga ruxsat yo'q.")
+        return
+
     try:
-        # 1️⃣ Users IDs olish
-        users = await get_all_user_ids()  # Kutilgan: [1,2,3] yoki [{'user_id':1}, ...]
-        normalized_user_ids = []
-        for u in users:
-            if isinstance(u, dict):
-                normalized_user_ids.append(str(u.get('user_id', next(iter(u.values()), ''))))
-            elif isinstance(u, (list, tuple)) and u:
-                normalized_user_ids.append(str(u[0]))
-            else:
-                normalized_user_ids.append(str(u))
+        # 1️⃣ Foydalanuvchilar
+        users = await get_all_user_ids()
+        users_text = ", ".join(map(str, users)) if users else "Foydalanuvchilar yo‘q"
 
-        users_text = ", ".join(normalized_user_ids) if normalized_user_ids else "Foydalanuvchilar yo'q"
-
-        # 2️⃣ Kodlar olish va formatlash
-        codes = await get_all_codes()  # Kutilgan: [{'code','kanal_id','reklamapost_id','qism','nom'}, ...]
-        codes_lines = []
-
-        for row in codes:
-            if isinstance(row, dict):
-                code = row.get("code", "")
-                kanal_id = row.get("kanal_id", "")
-                reklamapost_id = row.get("reklamapost_id", "")
-                qism = row.get("qism", "")
-                nom = row.get("nom", "")
-            else:
-                # Tuple yoki list
-                code, kanal_id, reklamapost_id, qism, nom = (list(row) + [""] * 5)[:5]
-
-            codes_lines.append(f"{code} {kanal_id} {reklamapost_id} {qism} {nom}")
-
-        codes_text = "\n".join(codes_lines) if codes_lines else "Kodlar yo'q"
-
-        # 3️⃣ Yuborish — uzun bo‘lsa fayl sifatida
-        dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}"
-        if len(dump_content) > 3900:
-            bio = io.BytesIO()
-            bio.name = "database_dump.txt"
-            bio.write(dump_content.encode("utf-8"))
-            bio.seek(0)
-            await message.answer("📦 Bazaning natijasi juda uzun — fayl sifatida yuborilmoqda.")
-            await message.answer_document(types.InputFile(bio, filename="database_dump.txt"))
+        # 2️⃣ Kodlar
+        codes = await get_all_codes()
+        if codes:
+            codes_lines = [
+                f"{c['code']} | {c['channel']} | {c['message_id']} | {c['post_count']} post | {c['title']}"
+                for c in codes
+            ]
+            codes_text = "\n".join(codes_lines)
         else:
-            await message.answer(f"📋 *Users IDlari:*\n`{users_text}`", parse_mode="Markdown")
+            codes_text = "Kodlar yo‘q"
+
+        # 3️⃣ Umumiy matn
+        dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}"
+
+        # 4️⃣ Juda uzun bo‘lsa fayl sifatida yuborish
+        if len(dump_content) > 3900:
+            bio = io.BytesIO(dump_content.encode("utf-8"))
+            bio.name = "database_dump.txt"
+            await message.answer_document(types.InputFile(bio))
+        else:
+            await message.answer(f"📋 *Foydalanuvchilar:*\n`{users_text}`", parse_mode="Markdown")
             await message.answer(f"🎬 *Kodlar:*\n```\n{codes_text}\n```", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer(f"❌ Xatolik yuz berdi: {e}")
-        print(f"[dump_database_handler] Error: {e}")
+        await message.answer(f"❌ Bazani olishda xatolik: {e}")
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
