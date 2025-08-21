@@ -87,6 +87,9 @@ class PostStates(StatesGroup):
     waiting_for_image = State()
     waiting_for_title = State()
     waiting_for_link = State()
+    
+class KanalStates(StatesGroup):
+    waiting_for_channel = State()
 
 # === OBUNA TEKSHIRISH FUNKSIYASI ===
 async def get_unsubscribed_channels(user_id):
