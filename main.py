@@ -32,7 +32,7 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = os.getenv("CHANNEL_USERNAMES").split(",")
+CHANNELS = ["@AniVerseClip", "@anilordtvbot", "@"]
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
@@ -281,7 +281,6 @@ async def add_users_process(message: types.Message, state: FSMContext):
             errors += 1
 
     await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
-
 
 
 @dp.message_handler(lambda m: m.text == "📦 Bazani olish")
