@@ -33,7 +33,7 @@ keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
 CHANNELS = []
-MAIN_CHANNELS = []
+MAIN_CHANNELS = [@Minogra_Apokalipsisi_1,@anilord_1]
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 bot = Bot(token=API_TOKEN)
