@@ -32,7 +32,7 @@ load_dotenv()
 keep_alive()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CHANNELS = ["@AniVerseClip", "@anilordtvbot", "@HENTAY_UZBEKTILIDA", "@anilord_ongoing", "@anilordmanhwa"]
+CHANNELS = []
 MAIN_CHANNELS = os.getenv("MAIN_CHANNELS").split(",")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
@@ -51,7 +51,7 @@ async def make_subscribe_markup(code):
     keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
     return keyboard
 
-ADMINS = {6486825926, 5959511392, 7483732504}
+ADMINS = {6486825926, 7227368893}
 
 # === HOLATLAR ===
 
@@ -145,7 +145,7 @@ async def start_handler(message: types.Message):
         if unsubscribed:
             markup = await make_full_subscribe_markup(code)
             await message.answer(
-                "❗ Kino olishdan oldin quyidagi kanal(lar)ga obuna bo‘ling:",
+                "❗ Animeni olishdan oldin quyidagi homiy kanal(lar)ga obuna bo‘ling:",
                 reply_markup=markup
             )
         else:
@@ -161,8 +161,7 @@ async def start_handler(message: types.Message):
         kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
         kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
-        kb.add("➕ Admin qo‘shish", "📦 Bazani olish")
-        kb.add("📥 User qo‘shish", "📡 Kanal boshqaruvi")
+        kb.add("➕ Admin qo‘shish", "📡 Kanal boshqaruvi")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -170,7 +169,7 @@ async def start_handler(message: types.Message):
             KeyboardButton("🎞 Barcha animelar"),
             KeyboardButton("✉️ Admin bilan bog‘lanish")
         )
-        await message.answer("🎬 Botga xush kelibsiz!\nKod kiriting:", reply_markup=kb)
+        await message.answer("✨", reply_markup=kb)
 
 # === TEKSHIRUV CALLBACK – faqat obuna bo‘lmaganlar uchun ===
 @dp.callback_query_handler(lambda c: c.data.startswith("checksub:"))
@@ -259,32 +258,6 @@ async def send_admin_reply(message: types.Message, state: FSMContext):
     finally:
         await state.finish()
 
-@dp.message_handler(lambda m: m.text == "📥 User qo‘shish", user_id=ADMINS)
-async def add_users_start(message: types.Message):
-    await AdminStates.waiting_for_user_list.set()
-    await message.answer("📋 Foydalanuvchi ID ro‘yxatini yuboring (har bir qatorda bitta ID yoki vergul bilan):")
-@dp.message_handler(state=AdminStates.waiting_for_user_list, user_id=ADMINS)
-async def add_users_process(message: types.Message, state: FSMContext):
-    await state.finish()
-    text = message.text.strip()
-
-    # Har bir qatordagi yoki vergul bilan ajratilgan ID larni ajratish
-    raw_ids = text.replace(",", "\n").split("\n")
-    user_ids = [i.strip() for i in raw_ids if i.strip().isdigit()]
-
-    added = 0
-    errors = 0
-
-    for uid in user_ids:
-        try:
-            await add_user(int(uid))
-            added += 1
-        except Exception as e:
-            print(f"❌ Xato: {uid} -> {e}")
-            errors += 1
-
-    await message.answer(f"✅ Qo‘shildi: {added} ta\n❌ Xato: {errors} ta")
-
 @dp.message_handler(lambda m: m.text == "📡 Kanal boshqaruvi", user_id=ADMINS)
 async def kanal_menu(message: types.Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -345,43 +318,17 @@ async def delete_channel_confirm(callback: types.CallbackQuery):
     else:
         await callback.message.edit_text("⚠️ Bu kanal topilmadi.")
     await callback.answer()
-
-@dp.message_handler(lambda m: m.text == "📦 Bazani olish")
-async def dump_database_handler(message: types.Message):
-    if message.from_user.id not in ADMINS:
-        await message.answer("⛔ Sizga ruxsat yo'q.")
-        return
-
-    try:
-        # 1️⃣ Foydalanuvchilar
-        users = await get_all_user_ids()
-        users_text = ", ".join(map(str, users)) if users else "Foydalanuvchilar yo‘q"
-
-        # 2️⃣ Kodlar
-        codes = await get_all_codes()
-        if codes:
-            codes_lines = [
-                f"{c['code']} | {c['channel']} | {c['message_id']} | {c['post_count']} post | {c['title']}"
-                for c in codes
-            ]
-            codes_text = "\n".join(codes_lines)
-        else:
-            codes_text = "Kodlar yo‘q"
-
-        # 3️⃣ Umumiy matn
-        dump_content = f"--- USERS ---\n{users_text}\n\n--- KODLAR ---\n{codes_text}"
-
-        # 4️⃣ Juda uzun bo‘lsa fayl sifatida yuborish
-        if len(dump_content) > 3900:
-            bio = io.BytesIO(dump_content.encode("utf-8"))
-            bio.name = "database_dump.txt"
-            await message.answer_document(types.InputFile(bio))
-        else:
-            await message.answer(f"📋 *Foydalanuvchilar:*\n`{users_text}`", parse_mode="Markdown")
-            await message.answer(f"🎬 *Kodlar:*\n```\n{codes_text}\n```", parse_mode="Markdown")
-
-    except Exception as e:
-        await message.answer(f"❌ Bazani olishda xatolik: {e}")
+# ⬅️ Orqaga qaytish (Admin panelga)
+@dp.message_handler(lambda m: m.text == "⬅️ Orqaga", user_id=ADMINS)
+async def back_to_admin_menu(message: types.Message):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("➕ Anime qo‘shish")
+    kb.add("📊 Statistika", "📈 Kod statistikasi")
+    kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
+    kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
+    kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
+    kb.add("➕ Admin qo‘shish", "📡 Kanal boshqaruvi")
+    await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
@@ -735,7 +682,7 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
         await add_kino_code(code, server_channel, reklama_id + 1, post_count, title)
 
         download_btn = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("📥 Yuklab olish", url=f"https://t.me/{BOT_USERNAME}?start={code}")
+            InlineKeyboardButton("✨Yuklab olish✨", url=f"https://t.me/{BOT_USERNAME}?start={code}")
         )
 
         try:
@@ -754,34 +701,25 @@ async def add_kino_handler(message: types.Message, state: FSMContext):
     await state.finish()
 
 @dp.message_handler(lambda m: m.text == "📄 Kodlar ro‘yxati")
-async def kodlar(message: types.Message):
+async def show_all_animes(message: types.Message):
     kodlar = await get_all_codes()
     if not kodlar:
-        await message.answer("📂 Kodlar yo‘q.")
-        return
-    
-    # Kodlarni raqam bo‘yicha saralash
-    try:
-        kodlar = sorted(kodlar, key=lambda x: int(x["code"]) if isinstance(x, dict) else int(x[0]))
-    except Exception as e:
-        await message.answer(f"❌ Saralashda xatolik: {e}")
+        await message.answer("Ba'zada hech qanday kodlar yo'q!")
         return
 
-    text = "📄 Kodlar:\n"
-    for row in kodlar:
-        if isinstance(row, dict):
-            code = row.get("code", "")
-            ch = row.get("channel", "")
-            msg_id = row.get("message_id", "")
-            count = row.get("post_count", "")
-            title = row.get("title", "")
-        else:  # tuple yoki list
-            code, ch, msg_id, count, title = (list(row) + [""] * 5)[:5]
+    # Kodlarni raqam bo‘yicha tartiblash
+    kodlar = sorted(kodlar, key=lambda x: int(x["code"]))
+
+    # Har 100 tadan bo‘lib yuborish
+    chunk_size = 100
+    for i in range(0, len(kodlar), chunk_size):
+        chunk = kodlar[i:i + chunk_size]
+        text = "📄 *Barcha animelar:*\n\n"
+        for row in chunk:
+            text += f"`{row['code']}` – *{row['title']}*\n"
+
+        await message.answer(text, parse_mode="Markdown")
         
-        text += f"{code} {ch} {msg_id} {count} post {title}\n"
-
-    await message.answer(f"```\n{text}\n```", parse_mode="Markdown")
-
 # === Statistika
 @dp.message_handler(lambda m: m.text == "📊 Statistika")
 async def stats(message: types.Message):
@@ -814,7 +752,7 @@ async def get_post_link(message: types.Message, state: FSMContext):
     link = message.text.strip()
 
     button = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("📥 Yuklab olish", url=link)
+        InlineKeyboardButton("✨Yuklab olish✨", url=link)
     )
 
     try:
