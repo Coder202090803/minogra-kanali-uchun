@@ -456,10 +456,7 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("➕ Admin qo‘shish", "📡 Kanal boshqaruvi")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
-# ==== QO‘LLANMA MENYUSI ====
-@dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
-    await message.answer("Qo'llanma hali qo'shilmagan", reply_markup=kb)
-    
+
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
 async def add_admin_start(message: types.Message):
