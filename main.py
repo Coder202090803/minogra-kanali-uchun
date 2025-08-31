@@ -1,7 +1,9 @@
 # === IMPORTLAR ===
 import io
 import os
+import asyncio
 import time
+from aiogram.utils.exceptions import RetryAfter, BotBlocked, ChatNotFound
 from datetime import datetime, date
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -25,7 +27,8 @@ from database import (
     get_code_stat,
     increment_stat,
     get_all_user_ids,
-    update_anime_code
+    update_anime_code,
+    get_today_users
 )
 
 
@@ -50,7 +53,7 @@ async def make_subscribe_markup(code):
             keyboard.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=invite_link.invite_link))
         except Exception as e:
             print(f"❌ Link yaratishda xatolik: {channel} -> {e}")
-    keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_sub:{code}"))
+    keyboard.add(InlineKeyboardButton("✅ Tekshirish", callback_data=f"checksub:{code}"))
     return keyboard
 
 ADMINS = {6486825926, 7227368893}
@@ -162,7 +165,7 @@ async def start_handler(message: types.Message):
         kb.add("📊 Statistika", "📈 Kod statistikasi")
         kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
         kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
-        kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
+        kb.add("📢 Habar yuborish")
         kb.add("➕ Admin qo‘shish", "📡 Kanal boshqaruvi")
         await message.answer("👮‍♂️ Admin panel:", reply_markup=kb)
     else:
@@ -449,110 +452,13 @@ async def back_to_admin_menu(message: types.Message):
     kb.add("📊 Statistika", "📈 Kod statistikasi")
     kb.add("❌ Kodni o‘chirish", "📄 Kodlar ro‘yxati")
     kb.add("✏️ Kodni tahrirlash", "📤 Post qilish")
-    kb.add("📢 Habar yuborish", "📘 Qo‘llanma")
+    kb.add("📢 Habar yuborish")
     kb.add("➕ Admin qo‘shish", "📡 Kanal boshqaruvi")
     await message.answer("🔙 Admin menyu:", reply_markup=kb)
 
 # ==== QO‘LLANMA MENYUSI ====
 @dp.message_handler(lambda m: m.text == "📘 Qo‘llanma")
-async def qollanma(message: types.Message):
-    kb = (
-        InlineKeyboardMarkup(row_width=1)
-        .add(InlineKeyboardButton("📥 1. Anime qo‘shish", callback_data="help_add"))
-        .add(InlineKeyboardButton("📡 2. Kanal yaratish", callback_data="help_channel"))
-        .add(InlineKeyboardButton("🆔 3. Reklama ID olish", callback_data="help_id"))
-        .add(InlineKeyboardButton("🔁 4. Kod ishlashi", callback_data="help_code"))
-        .add(InlineKeyboardButton("❓ 5. Savol-javob", callback_data="help_faq"))
-    )
-    await message.answer("📘 Qanday yordam kerak?", reply_markup=kb)
-
-
-# ==== MATNLAR ====
-HELP_TEXTS = {
-    "help_add": (
-        "📥 *Anime qo‘shish*\n\n"
-        "`KOD @kanal REKLAMA_ID POST_SONI ANIME_NOMI`\n\n"
-        "Misol: `91 @MyKino 4 12 Naruto`\n\n"
-        "• *Kod* – foydalanuvchi yozadigan raqam\n"
-        "• *@kanal* – server kanal username\n"
-        "• *REKLAMA_ID* – post ID raqami (raqam)\n"
-        "• *POST_SONI* – nechta qism borligi\n"
-        "• *ANIME_NOMI* – ko‘rsatiladigan sarlavha\n\n"
-        "📩 Endi formatda xabar yuboring:"
-    ),
-    "help_channel": (
-        "📡 *Kanal yaratish*\n\n"
-        "1. 2 ta kanal yarating:\n"
-        "   • *Server kanal* – post saqlanadi\n"
-        "   • *Reklama kanal* – bot ulashadi\n\n"
-        "2. Har ikkasiga botni admin qiling\n\n"
-        "3. Kanalni public (@username) qiling"
-    ),
-    "help_id": (
-        "🆔 *Reklama ID olish*\n\n"
-        "1. Server kanalga post joylang\n\n"
-        "2. Post ustiga bosing → *Share* → *Copy link*\n\n"
-        "3. Link oxiridagi sonni oling\n\n"
-        "Misol: `t.me/MyKino/4` → ID = `4`"
-    ),
-    "help_code": (
-        "🔁 *Kod ishlashi*\n\n"
-        "1. Foydalanuvchi kod yozadi (masalan: `91`)\n\n"
-        "2. Obuna tekshiriladi → reklama post yuboriladi\n\n"
-        "3. Tugmalar orqali qismlarni ochadi"
-    ),
-    "help_faq": (
-        "❓ *Tez-tez so‘raladigan savollar*\n\n"
-        "• *Kodni qanday ulashaman?*\n"
-        "  `https://t.me/<BOT_USERNAME>?start=91`\n\n"
-        "• *Har safar yangi kanal kerakmi?*\n"
-        "  – Yo‘q, bitta server kanal yetarli\n\n"
-        "• *Kodni tahrirlash/o‘chirish mumkinmi?*\n"
-        "  – Ha, admin menyuda ✏️ / ❌ tugmalari bor"
-    )
-}
-
-
-# ==== CALLBACK: HAR BIR YORDAM SAHIFASI ====
-@dp.callback_query_handler(lambda c: c.data.startswith("help_"))
-async def show_help_page(callback: types.CallbackQuery):
-    key = callback.data
-    text = HELP_TEXTS.get(key, "❌ Ma'lumot topilmadi.")
-    
-    # Ortga tugmasi
-    kb = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("⬅️ Ortga", callback_data="back_help")
-    )
-    
-    try:
-        await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
-    except Exception as e:
-        # Agar matn o'zgartirilmayotgan bo'lsa (masalan, rasmli xabar bo'lsa)
-        await callback.message.answer(text, parse_mode="Markdown", reply_markup=kb)
-        await callback.message.delete()  # Eski xabarni o'chirish
-    finally:
-        await callback.answer()
-
-
-# ==== ORTGA TUGMASI ====
-@dp.callback_query_handler(lambda c: c.data == "back_help")
-async def back_to_qollanma(callback: types.CallbackQuery):
-    kb = (
-        InlineKeyboardMarkup(row_width=1)
-        .add(InlineKeyboardButton("📥 1. Anime qo‘shish", callback_data="help_add"))
-        .add(InlineKeyboardButton("📡 2. Kanal yaratish", callback_data="help_channel"))
-        .add(InlineKeyboardButton("🆔 3. Reklama ID olish", callback_data="help_id"))
-        .add(InlineKeyboardButton("🔁 4. Kod ishlashi", callback_data="help_code"))
-        .add(InlineKeyboardButton("❓ 5. Savol-javob", callback_data="help_faq"))
-    )
-    
-    try:
-        await callback.message.edit_text("📘 Qanday yordam kerak?", reply_markup=kb)
-    except Exception as e:
-        await callback.message.answer("📘 Qanday yordam kerak?", reply_markup=kb)
-        await callback.message.delete()
-    finally:
-        await callback.answer()
+    await message.answer("Qo'llanma hali qo'shilmagan", reply_markup=kb)
     
 # === Admin qo'shish===
 @dp.message_handler(lambda m: m.text == "➕ Admin qo‘shish", user_id=ADMINS)
@@ -712,7 +618,7 @@ async def send_forward_only(message: types.Message, state: FSMContext):
             fail += 1
 
         # Har 25 xabardan keyin 1 sekund kutish
-        if i % 25 == 0:
+        if i % 27 == 0:
             await asyncio.sleep(1)
 
     await message.answer(f"✅ Yuborildi: {success} ta\n❌ Xatolik: {fail} ta", reply_markup=admin_keyboard())
@@ -842,75 +748,47 @@ async def stats(message: types.Message):
         f"📅 Bugun qo'shilgan foydalanuvchilar: {today_users} ta"
     )
     await message.answer(text, reply_markup=admin_keyboard())
-
-# === Post qilish ===
-@dp.message_handler(lambda m: m.text == "📤 Post qilish", user_id=ADMINS)
+@dp.message_handler(lambda m: m.text == "📤 Post qilish")
 async def start_post_process(message: types.Message):
-    await PostStates.waiting_for_image.set()
-    await message.answer("🖼 Iltimos, post uchun rasm yoki video yuboring (video 60 sekunddan oshmasin).", reply_markup=control_keyboard())
-
-@dp.message_handler(content_types=[types.ContentType.PHOTO, types.ContentType.VIDEO], state=PostStates.waiting_for_image)
-async def get_post_image_or_video(message: types.Message, state: FSMContext):
-    if message.content_type == "text" and message.text == "📡 Boshqarish":
-        await state.finish()
-        await send_admin_panel(message)
-        return
-
-    if message.content_type == "photo":
-        file_id = message.photo[-1].file_id
-        await state.update_data(media=("photo", file_id))
-    elif message.content_type == "video":
-        duration = getattr(message.video, "duration", 0)
-        if duration > 60:
-            await message.answer("❌ Video 60 sekunddan oshmasligi kerak. Qaytadan yuboring.", reply_markup=control_keyboard())
-            return
-        file_id = message.video.file_id
-        await state.update_data(media=("video", file_id))
-
+    if message.from_user.id in ADMINS:
+        await PostStates.waiting_for_image.set()
+        await message.answer("🖼 Iltimos, post uchun rasm yuboring.")
+        
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=PostStates.waiting_for_image)
+async def get_post_image(message: types.Message, state: FSMContext):
+    photo = message.photo[-1].file_id
+    await state.update_data(photo=photo)
     await PostStates.waiting_for_title.set()
-    await message.answer("📌 Endi rasm/video ostiga yoziladigan nomni yuboring.", reply_markup=control_keyboard())
-
+    await message.answer("📌 Endi rasm ostiga yoziladigan nomni yuboring.")
 @dp.message_handler(state=PostStates.waiting_for_title)
 async def get_post_title(message: types.Message, state: FSMContext):
-    if message.text == "📡 Boshqarish":
-        await state.finish()
-        await send_admin_panel(message)
-        return
-
     await state.update_data(title=message.text.strip())
     await PostStates.waiting_for_link.set()
-    await message.answer("🔗 Yuklab olish uchun havolani yuboring.", reply_markup=control_keyboard())
-
+    await message.answer("🔗 Yuklab olish uchun havolani yuboring.")
 @dp.message_handler(state=PostStates.waiting_for_link)
 async def get_post_link(message: types.Message, state: FSMContext):
-    if message.text == "📡 Boshqarish":
-        await state.finish()
-        await send_admin_panel(message)
-        return
-
     data = await state.get_data()
-    media = data.get("media")
-    if not media:
-        await message.answer("❗ Media topilmadi.", reply_markup=control_keyboard())
-        await PostStates.waiting_for_image.set()
-        return
-
-    media_type, file_id = media
+    photo = data.get("photo")
     title = data.get("title")
     link = message.text.strip()
 
-    button = InlineKeyboardMarkup().add(InlineKeyboardButton("✨Yuklab olish✨", url=link))
+    button = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("✨Yuklab olish✨", url=link)
+    )
 
     try:
-        if media_type == "photo":
-            await bot.send_photo(message.chat.id, file_id, caption=title, reply_markup=button)
-        elif media_type == "video":
-            await bot.send_video(message.chat.id, file_id, caption=title, reply_markup=button)
-        await message.answer("✅ Post muvaffaqiyatli yuborildi.", reply_markup=admin_keyboard())
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo=photo,
+            caption=title,
+            reply_markup=button
+        )
+        await message.answer("✅ Post muvaffaqiyatli yuborildi.")
     except Exception as e:
-        await message.answer(f"❌ Xatolik: {e}", reply_markup=admin_keyboard())
+        await message.answer(f"❌ Xatolik yuz berdi: {e}")
     finally:
         await state.finish()
+
 
 # === ❌ Kodni o‘chirish
 @dp.message_handler(lambda m: m.text == "❌ Kodni o‘chirish")
